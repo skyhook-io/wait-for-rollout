@@ -1,192 +1,68 @@
-name: 'Argo Rollouts Wait'
-description: 'Wait for an Argo Rollout to complete with configurable timeout'
-author: 'KoalaOps'
-
+name: Argo Rollouts Wait
+description: Wait for an Argo Rollout to complete with configurable timeout
+author: KoalaOps
 branding:
-  icon: 'clock'
-  color: 'green'
-
+  icon: clock
+  color: green
 inputs:
   rollout_name:
-    description: 'Name of the Argo Rollout'
+    description: Name of the Argo Rollout
     required: true
   namespace:
-    description: 'Kubernetes namespace'
+    description: Kubernetes namespace
     required: false
-    default: 'default'
+    default: default
   timeout:
-    description: 'Timeout for waiting (e.g., 300s, 5m, 10m)'
+    description: Timeout for waiting (e.g., 300s, 5m, 10m)
     required: false
-    default: '300s'
+    default: 300s
   verify_only:
-    description: 'Only verify rollout health without promoting (true/false)'
+    description: Only verify rollout health without promoting (true/false)
     required: false
     default: 'false'
   install_plugin:
-    description: 'Install Argo Rollouts kubectl plugin if not present'
+    description: Install Argo Rollouts kubectl plugin if not present
     required: false
     default: 'true'
   plugin_version:
-    description: 'Argo Rollouts plugin version to install'
+    description: Argo Rollouts plugin version to install
     required: false
-    default: 'latest'
-
+    default: v1.10.1
 outputs:
   status:
-    description: 'Final rollout status (Healthy, Degraded, Progressing, Paused)'
+    description: Final rollout status (Healthy, Degraded, Progressing, Paused)
     value: ${{ steps.wait.outputs.status }}
   message:
-    description: 'Status message from the rollout'
+    description: Status message from the rollout
     value: ${{ steps.wait.outputs.message }}
   revision:
-    description: 'Current revision number'
+    description: Current revision number
     value: ${{ steps.wait.outputs.revision }}
-
 runs:
-  using: 'composite'
+  using: composite
   steps:
-    - name: Install Argo Rollouts plugin
-      if: inputs.install_plugin == 'true'
-      shell: bash
-      run: |
-        # Check if plugin is already installed
-        if kubectl argo rollouts version &> /dev/null; then
-          echo "✅ Argo Rollouts plugin already installed"
-          kubectl argo rollouts version
-        else
-          echo "📦 Installing Argo Rollouts kubectl plugin..."
-          
-          # Determine version URL
-          if [ "${{ inputs.plugin_version }}" == "latest" ]; then
-            DOWNLOAD_URL="https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64"
-          else
-            DOWNLOAD_URL="https://github.com/argoproj/argo-rollouts/releases/download/${{ inputs.plugin_version }}/kubectl-argo-rollouts-linux-amd64"
-          fi
-          
-          # Download and install
-          curl -LO "$DOWNLOAD_URL"
-          chmod +x ./kubectl-argo-rollouts-linux-amd64
-          sudo mv ./kubectl-argo-rollouts-linux-amd64 /usr/local/bin/kubectl-argo-rollouts
-          
-          # Verify installation
-          kubectl argo rollouts version
-          echo "✅ Argo Rollouts plugin installed successfully"
-        fi
-    
-    - name: Check rollout exists
-      shell: bash
-      run: |
-        echo "🔍 Checking for rollout: ${{ inputs.rollout_name }} in namespace: ${{ inputs.namespace }}"
-        
-        if kubectl get rollout "${{ inputs.rollout_name }}" -n "${{ inputs.namespace }}" &> /dev/null; then
-          echo "✅ Rollout found"
-        else
-          echo "::error::Rollout not found: ${{ inputs.rollout_name }} in namespace: ${{ inputs.namespace }}"
-          echo "Available rollouts in namespace:"
-          kubectl get rollouts -n "${{ inputs.namespace }}" || echo "No rollouts found"
-          exit 1
-        fi
-    
-    - name: Get initial rollout status
-      shell: bash
-      run: |
-        echo "📊 Initial rollout status:"
-        kubectl argo rollouts get rollout "${{ inputs.rollout_name }}" \
-          -n "${{ inputs.namespace }}" \
-          --no-color || true
-    
-    - name: Wait for rollout
-      id: wait
-      shell: bash
-      run: |
-        echo "⏳ Waiting for rollout to complete (timeout: ${{ inputs.timeout }})..."
-        
-        # Run status command and capture output
-        set +e
-        OUTPUT=$(kubectl argo rollouts status "${{ inputs.rollout_name }}" \
-          -n "${{ inputs.namespace }}" \
-          --timeout "${{ inputs.timeout }}" 2>&1)
-        STATUS_CODE=$?
-        set -e
-        
-        echo "$OUTPUT"
-        
-        # Get detailed status
-        ROLLOUT_JSON=$(kubectl get rollout "${{ inputs.rollout_name }}" \
-          -n "${{ inputs.namespace }}" \
-          -o json)
-        
-        # Extract status fields
-        STATUS=$(echo "$ROLLOUT_JSON" | jq -r '.status.phase // "Unknown"')
-        MESSAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.message // "No message"')
-        REVISION=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentStepIndex // 0')
-        REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.replicas // 0')
-        READY_REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.readyReplicas // 0')
-        
-        # Set outputs
-        echo "status=$STATUS" >> $GITHUB_OUTPUT
-        echo "message=$MESSAGE" >> $GITHUB_OUTPUT
-        echo "revision=$REVISION" >> $GITHUB_OUTPUT
-        
-        # Log status
-        echo "📋 Rollout Status:"
-        echo "  Phase: $STATUS"
-        echo "  Message: $MESSAGE"
-        echo "  Replicas: $READY_REPLICAS/$REPLICAS ready"
-        echo "  Revision: $REVISION"
-        
-        # Handle status code
-        if [ $STATUS_CODE -eq 0 ]; then
-          echo "✅ Rollout completed successfully"
-        else
-          echo "::error::Rollout failed or timed out"
-          
-          # Get more details for debugging
-          echo "::group::Rollout Details"
-          kubectl argo rollouts get rollout "${{ inputs.rollout_name }}" \
-            -n "${{ inputs.namespace }}" \
-            --no-color || true
-          echo "::endgroup::"
-          
-          echo "::group::Pod Status"
-          kubectl get pods -n "${{ inputs.namespace }}" \
-            -l "rollouts-pod-template-hash" \
-            --show-labels || true
-          echo "::endgroup::"
-          
-          exit 1
-        fi
-    
-    - name: Handle promotion
-      if: inputs.verify_only != 'true' && success()
-      shell: bash
-      run: |
-        echo "📋 Note: Auto-promotion not implemented in v1"
-        echo "The rollout has been verified as healthy."
-        echo "Manual promotion may be required depending on your rollout strategy."
-        
-        # Show current rollout strategy
-        STRATEGY=$(kubectl get rollout "${{ inputs.rollout_name }}" \
-          -n "${{ inputs.namespace }}" \
-          -o jsonpath='{.spec.strategy}')
-        
-        echo "::notice::Rollout strategy: $STRATEGY"
-    
-    - name: Generate summary
-      if: always()
-      shell: bash
-      run: |
-        echo "## 🚀 Argo Rollout Status" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Rollout:** ${{ inputs.rollout_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Namespace:** ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Status:** ${{ steps.wait.outputs.status }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Message:** ${{ steps.wait.outputs.message }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Revision:** ${{ steps.wait.outputs.revision }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ steps.wait.outputs.status }}" == "Healthy" ]; then
-          echo "✅ Rollout is healthy" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "⚠️ Rollout status: ${{ steps.wait.outputs.status }}" >> $GITHUB_STEP_SUMMARY
-        fi
+  - name: Install locked rollouts
+    shell: bash
+    run: python3 "${{ github.action_path }}/.locked/install.py" rollouts
+    env:
+      LOCKED_REQUESTED_VERSION: ${{ inputs.plugin_version }}
+      LOCKED_VERIFY_ONLY: ${{ inputs.install_plugin != 'true' }}
+  - name: Check rollout exists
+    shell: bash
+    run: "echo \"\U0001F50D Checking for rollout: ${{ inputs.rollout_name }} in namespace: ${{ inputs.namespace }}\"\n\nif kubectl get rollout \"${{ inputs.rollout_name }}\" -n \"${{ inputs.namespace }}\" &> /dev/null; then\n  echo \"✅ Rollout found\"\nelse\n  echo \"::error::Rollout not found: ${{ inputs.rollout_name }} in namespace: ${{ inputs.namespace }}\"\n  echo \"Available rollouts in namespace:\"\n  kubectl get rollouts -n \"${{ inputs.namespace }}\" || echo \"No rollouts found\"\n  exit 1\nfi\n"
+  - name: Get initial rollout status
+    shell: bash
+    run: "echo \"\U0001F4CA Initial rollout status:\"\nkubectl argo rollouts get rollout \"${{ inputs.rollout_name }}\" \\\n  -n \"${{ inputs.namespace }}\" \\\n  --no-color || true\n"
+  - name: Wait for rollout
+    id: wait
+    shell: bash
+    run: "echo \"⏳ Waiting for rollout to complete (timeout: ${{ inputs.timeout }})...\"\n\n# Run status command and capture output\nset +e\nOUTPUT=$(kubectl argo rollouts status \"${{ inputs.rollout_name }}\" \\\n  -n \"${{ inputs.namespace }}\" \\\n  --timeout \"${{ inputs.timeout }}\" 2>&1)\nSTATUS_CODE=$?\nset -e\n\necho \"$OUTPUT\"\n\n# Get detailed status\nROLLOUT_JSON=$(kubectl get rollout \"${{ inputs.rollout_name }}\" \\\n  -n \"${{ inputs.namespace }}\" \\\n  -o json)\n\n# Extract status fields\nSTATUS=$(echo \"$ROLLOUT_JSON\" | jq -r '.status.phase // \"Unknown\"')\nMESSAGE=$(echo \"$ROLLOUT_JSON\" | jq -r '.status.message // \"No message\"')\nREVISION=$(echo \"$ROLLOUT_JSON\" | jq -r '.status.currentStepIndex // 0')\nREPLICAS=$(echo \"$ROLLOUT_JSON\" | jq -r '.status.replicas // 0')\nREADY_REPLICAS=$(echo \"$ROLLOUT_JSON\" | jq -r '.status.readyReplicas // 0')\n\n# Set outputs\necho \"status=$STATUS\" >> $GITHUB_OUTPUT\necho \"message=$MESSAGE\" >> $GITHUB_OUTPUT\necho \"revision=$REVISION\"\
+      \ >> $GITHUB_OUTPUT\n\n# Log status\necho \"\U0001F4CB Rollout Status:\"\necho \"  Phase: $STATUS\"\necho \"  Message: $MESSAGE\"\necho \"  Replicas: $READY_REPLICAS/$REPLICAS ready\"\necho \"  Revision: $REVISION\"\n\n# Handle status code\nif [ $STATUS_CODE -eq 0 ]; then\n  echo \"✅ Rollout completed successfully\"\nelse\n  echo \"::error::Rollout failed or timed out\"\n  \n  # Get more details for debugging\n  echo \"::group::Rollout Details\"\n  kubectl argo rollouts get rollout \"${{ inputs.rollout_name }}\" \\\n    -n \"${{ inputs.namespace }}\" \\\n    --no-color || true\n  echo \"::endgroup::\"\n  \n  echo \"::group::Pod Status\"\n  kubectl get pods -n \"${{ inputs.namespace }}\" \\\n    -l \"rollouts-pod-template-hash\" \\\n    --show-labels || true\n  echo \"::endgroup::\"\n  \n  exit 1\nfi\n"
+  - name: Handle promotion
+    if: inputs.verify_only != 'true' && success()
+    shell: bash
+    run: "echo \"\U0001F4CB Note: Auto-promotion not implemented in v1\"\necho \"The rollout has been verified as healthy.\"\necho \"Manual promotion may be required depending on your rollout strategy.\"\n\n# Show current rollout strategy\nSTRATEGY=$(kubectl get rollout \"${{ inputs.rollout_name }}\" \\\n  -n \"${{ inputs.namespace }}\" \\\n  -o jsonpath='{.spec.strategy}')\n\necho \"::notice::Rollout strategy: $STRATEGY\"\n"
+  - name: Generate summary
+    if: always()
+    shell: bash
+    run: "echo \"## \U0001F680 Argo Rollout Status\" >> $GITHUB_STEP_SUMMARY\necho \"\" >> $GITHUB_STEP_SUMMARY\necho \"**Rollout:** ${{ inputs.rollout_name }}\" >> $GITHUB_STEP_SUMMARY\necho \"**Namespace:** ${{ inputs.namespace }}\" >> $GITHUB_STEP_SUMMARY\necho \"**Status:** ${{ steps.wait.outputs.status }}\" >> $GITHUB_STEP_SUMMARY\necho \"**Message:** ${{ steps.wait.outputs.message }}\" >> $GITHUB_STEP_SUMMARY\necho \"**Revision:** ${{ steps.wait.outputs.revision }}\" >> $GITHUB_STEP_SUMMARY\necho \"\" >> $GITHUB_STEP_SUMMARY\n\nif [ \"${{ steps.wait.outputs.status }}\" == \"Healthy\" ]; then\n  echo \"✅ Rollout is healthy\" >> $GITHUB_STEP_SUMMARY\nelse\n  echo \"⚠️ Rollout status: ${{ steps.wait.outputs.status }}\" >> $GITHUB_STEP_SUMMARY\nfi"
