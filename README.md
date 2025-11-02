@@ -14,7 +14,7 @@ Waits for an Argo Rollout to complete with configurable timeout and health verif
 
 ```yaml
 - name: Wait for rollout
-  uses: KoalaOps/rollouts-wait@v1
+  uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: backend
     namespace: production
@@ -48,7 +48,7 @@ Waits for an Argo Rollout to complete with configurable timeout and health verif
   run: kubectl apply -f manifests/
 
 - name: Wait for rollout
-  uses: KoalaOps/rollouts-wait@v1
+  uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: my-service
     namespace: production
@@ -57,7 +57,7 @@ Waits for an Argo Rollout to complete with configurable timeout and health verif
 ### With custom timeout
 ```yaml
 - name: Wait for complex rollout
-  uses: KoalaOps/rollouts-wait@v1
+  uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: backend
     namespace: staging
@@ -67,7 +67,7 @@ Waits for an Argo Rollout to complete with configurable timeout and health verif
 ### Verify only mode
 ```yaml
 - name: Check rollout health
-  uses: KoalaOps/rollouts-wait@v1
+  uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: frontend
     namespace: production
@@ -77,7 +77,7 @@ Waits for an Argo Rollout to complete with configurable timeout and health verif
 ### With specific plugin version
 ```yaml
 - name: Wait with specific plugin
-  uses: KoalaOps/rollouts-wait@v1
+  uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: api
     namespace: default
@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Setup kubectl
-        uses: KoalaOps/cloud-login@v1
+        uses: skyhook-io/cloud-login@v1
         with:
           provider: aws
           region: us-east-1
@@ -104,7 +104,7 @@ jobs:
           kustomize build overlays/production | kubectl apply -f -
       
       - name: Wait for rollout
-        uses: KoalaOps/rollouts-wait@v1
+        uses: skyhook-io/rollouts-wait@v1
         with:
           rollout_name: ${{ env.SERVICE_NAME }}
           namespace: production
@@ -122,7 +122,7 @@ The action supports all Argo Rollouts strategies:
 ### Canary
 ```yaml
 # Waits for canary to complete
-- uses: KoalaOps/rollouts-wait@v1
+- uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: my-canary
     timeout: 20m  # Longer for gradual rollout
@@ -131,7 +131,7 @@ The action supports all Argo Rollouts strategies:
 ### Blue-Green
 ```yaml
 # Waits for blue-green switch
-- uses: KoalaOps/rollouts-wait@v1
+- uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: my-bluegreen
     timeout: 5m  # Faster switch
@@ -140,7 +140,7 @@ The action supports all Argo Rollouts strategies:
 ### Progressive Delivery
 ```yaml
 # Monitors progressive stages
-- uses: KoalaOps/rollouts-wait@v1
+- uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: my-progressive
     timeout: 30m  # Multiple stages
@@ -158,7 +158,7 @@ The action automatically installs the kubectl-argo-rollouts plugin if not presen
 
 To skip installation (if pre-installed):
 ```yaml
-- uses: KoalaOps/rollouts-wait@v1
+- uses: skyhook-io/rollouts-wait@v1
   with:
     rollout_name: my-service
     install_plugin: false
