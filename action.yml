@@ -1,4 +1,4 @@
-name: 'Argo Rollouts Wait'
+name: 'Wait for Argo Rollouts'
 description: 'Wait for an Argo Rollout to complete with configurable timeout'
 author: 'Skyhook'
 
