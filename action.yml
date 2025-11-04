@@ -1,6 +1,6 @@
 name: 'Argo Rollouts Wait'
 description: 'Wait for an Argo Rollout to complete with configurable timeout'
-author: 'KoalaOps'
+author: 'Skyhook'
 
 branding:
   icon: 'clock'
